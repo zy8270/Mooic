@@ -1,42 +1,33 @@
 package com.rcmiku.ncmapi.api.player
 
-import com.rcmiku.ncmapi.api.NeteaseCrypto
 import com.rcmiku.ncmapi.api.UNBLOCK_BASE_URL
 import com.rcmiku.ncmapi.api.apiClient
 import com.rcmiku.ncmapi.api.apiGet
-import com.rcmiku.ncmapi.api.requireSuccess
 import com.rcmiku.ncmapi.model.LyricResponse
 import com.rcmiku.ncmapi.model.SongUrl
 import com.rcmiku.ncmapi.model.SongUrlResponse
-import com.rcmiku.ncmapi.utils.CookieKeys
-import com.rcmiku.ncmapi.utils.CookieProvider
-import com.rcmiku.ncmapi.utils.NeteaseClientConfig
-import com.rcmiku.ncmapi.utils.json as apiJson
-import io.ktor.client.request.header
+import com.rcmiku.ncmapi.utils.DebugLog
 import io.ktor.client.request.parameter
 import io.ktor.client.request.request
-import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
-import io.ktor.http.ContentType
 import io.ktor.http.HttpMethod
-import io.ktor.http.contentType
-import io.ktor.http.encodeURLParameter
 import io.ktor.http.isSuccess
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
-import kotlinx.serialization.json.put
-import java.util.UUID
 
 object PlayerApi {
+    /**
+     * Third-party sources supported by UnblockNeteaseMusic-utils.
+     * The unblock/match service expects one source name per request.
+     */
     private val unblockSources = listOf(
         "byfuns",
         "ddyr",
@@ -47,11 +38,15 @@ object PlayerApi {
         "unm"
     )
 
-    private val anonymousDeviceId = UUID.randomUUID().toString().replace("-", "")
-
     suspend fun songPlayUrlV1(songId: String, songLevel: SongLevel = SongLevel.STANDARD): Result<SongUrlResponse> {
-        val realId = parseSongId(songId).id
-        val officialResult = requestOfficialUrl(realId, songLevel)
+        val parsed = parseSongId(songId)
+        val realId = parsed.id
+        DebugLog.append("resolve song=$realId restricted=${parsed.shouldUseApiUnblock()}")
+
+        val officialResult = apiGet<SongUrlResponse>(
+            "/song/url/v1",
+            mapOf("id" to realId, "level" to songLevel.value)
+        )
         return if (officialResult.hasPlayableUrl()) officialResult else tryUnblockUrl(realId)
     }
 
@@ -95,74 +90,26 @@ object PlayerApi {
         return true
     }
 
-    private suspend fun requestOfficialUrl(
-        songId: String,
-        songLevel: SongLevel
-    ): Result<SongUrlResponse> = runCatching {
-        val path = "/api/song/enhance/player/url/v1"
-        val cookies = buildMap {
-            putAll(NeteaseClientConfig.cookieOverrides)
-            put(CookieKeys.DEVICE_ID, anonymousDeviceId)
-            putAll(CookieProvider.getCookieMap())
-        }
-        val csrf = cookies[CookieKeys.CSRF].orEmpty()
-        val headerJson = buildJsonObject {
-            listOf(
-                "osver", "deviceId", "os", "appver", "versioncode",
-                "mobilename", "resolution", "channel"
-            ).forEach { key ->
-                cookies[key]?.let { put(key, it) }
-            }
-            put("buildver", (System.currentTimeMillis() / 1000).toString())
-            put("requestId", "${System.currentTimeMillis()}_${(0..9999).random()}")
-            put("__csrf", csrf)
-            cookies[CookieKeys.MUSIC_U]?.let { put(CookieKeys.MUSIC_U, it) }
-        }
-        val requestJson = buildJsonObject {
-            put("ids", "[$songId]")
-            put("level", songLevel.value)
-            put("encodeType", "flac")
-            put("header", headerJson)
-        }.toString()
-        val fields = NeteaseCrypto.eapi(path, requestJson)
-        val response = apiClient.request("https://interface.music.163.com/eapi/song/enhance/player/url/v1") {
-            method = HttpMethod.Post
-            contentType(ContentType.Application.FormUrlEncoded)
-            header("Cookie", cookies.entries.joinToString("; ") { "${it.key}=${it.value}" })
-            setBody(fields.entries.joinToString("&") { (key, value) ->
-                "${key.encodeURLParameter()}=${value.encodeURLParameter()}"
-            })
-        }
-        val responseBody = response.bodyAsText()
-        response.requireSuccess(responseBody)
-        apiJson.decodeFromString<SongUrlResponse>(responseBody)
-    }
-
     private suspend fun tryUnblockUrl(songId: String): Result<SongUrlResponse> =
-        tryMatchUrl("${UNBLOCK_BASE_URL.trimEnd('/')}/match", songId)
+        tryMatchedSources("${UNBLOCK_BASE_URL.trimEnd('/')}/match", songId)
 
-    private suspend fun tryMatchUrl(endpoint: String, songId: String): Result<SongUrlResponse> {
-        var lastError: Exception? = null
+    private suspend fun tryMatchedSources(endpoint: String, songId: String): Result<SongUrlResponse> {
         unblockSources.forEach { source ->
-            try {
-                requestMatchedUrl(endpoint, songId, source)?.let { data ->
-                    return Result.success(
-                        SongUrlResponse(
-                            data = listOf(
-                                SongUrl(
-                                    id = songId.toLongOrNull() ?: 0L,
-                                    url = data.url,
-                                    br = data.br
-                                )
+            requestMatchedUrl(endpoint, songId, source)?.let { data ->
+                return Result.success(
+                    SongUrlResponse(
+                        data = listOf(
+                            SongUrl(
+                                id = songId.toLongOrNull() ?: 0L,
+                                url = data.url,
+                                br = data.br
                             )
                         )
                     )
-                }
-            } catch (e: Exception) {
-                lastError = e
+                )
             }
         }
-        return Result.failure(lastError ?: Exception("No full unlocked URL found"))
+        return Result.failure(Exception("No full unlocked URL found"))
     }
 
     private suspend fun requestMatchedUrl(
@@ -170,6 +117,8 @@ object PlayerApi {
         songId: String,
         source: String
     ): UnblockData? {
+        val startedAt = System.currentTimeMillis()
+        DebugLog.append("request endpoint=$endpoint song=$songId source=$source")
         return try {
             val response = apiClient.request(endpoint) {
                 method = HttpMethod.Get
@@ -177,11 +126,20 @@ object PlayerApi {
                 parameter("source", source)
             }
             if (response.status.isSuccess()) {
-                parseUnblockResponse(response.bodyAsText())
+                val body = response.bodyAsText()
+                val data = parseUnblockResponse(body)
+                DebugLog.append(
+                    "response endpoint=$endpoint song=$songId source=$source " +
+                        "success=${data != null} br=${data?.br ?: 0} " +
+                        "elapsed=${System.currentTimeMillis() - startedAt}ms"
+                )
+                data
             } else {
+                DebugLog.append("response endpoint=$endpoint song=$songId source=$source http=${response.status.value} elapsed=${System.currentTimeMillis() - startedAt}ms")
                 null
             }
         } catch (e: Exception) {
+            DebugLog.append("error endpoint=$endpoint song=$songId source=$source type=${e.javaClass.simpleName} message=${e.message?.take(160)} elapsed=${System.currentTimeMillis() - startedAt}ms")
             null
         }
     }
@@ -198,10 +156,12 @@ object PlayerApi {
             val code = jsonObj["code"]?.jsonPrimitive?.intOrNull
             if (code != null && code != 200) return null
 
-            val proxyUrl = jsonObj["proxyUrl"]?.jsonPrimitive?.contentOrNull
-                ?.takeIf { it.isNotBlank() }
             val data = extractMatchedData(jsonObj["data"])
-            val playableUrl = proxyUrl ?: data?.url?.takeIf { it.isNotBlank() }
+            // Prefer the validated matched URL. A top-level proxyUrl may point to a
+            // trial/proxy stream and must not bypass the freeTrialInfo/time checks.
+            val proxyUrl = jsonObj["proxyUrl"]?.jsonPrimitive?.contentOrNull
+                ?.takeIf { it.isNotBlank() && !isLikelyTrialUrl(it) }
+            val playableUrl = data?.url ?: proxyUrl
             playableUrl?.let { UnblockData(it, data?.br ?: 320000) }
         } catch (e: Exception) {
             null

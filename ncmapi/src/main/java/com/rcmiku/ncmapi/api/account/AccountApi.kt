@@ -4,6 +4,10 @@ import com.rcmiku.ncmapi.api.apiGet
 import com.rcmiku.ncmapi.api.apiPost
 import com.rcmiku.ncmapi.api.player.SongLevel
 import com.rcmiku.ncmapi.model.*
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.longOrNull
 
 object AccountApi {
 
@@ -77,7 +81,14 @@ object AccountApi {
                 name = item.name,
                 coverImgUrl = item.coverImgUrl,
                 trackCount = item.trackCount,
-                containsTracks = item.trackIds.any { it in trackIds },
+                containsTracks = item.trackIds.any { entry ->
+                    val id = when (entry) {
+                        is JsonObject -> (entry["id"] as? JsonPrimitive)?.longOrNull
+                        is JsonPrimitive -> entry.longOrNull
+                        else -> null
+                    }
+                    id in trackIds
+                },
                 playCount = item.playCount,
                 creator = item.creator,
                 description = item.description
@@ -189,7 +200,7 @@ object AccountApi {
         val name: String = "",
         @kotlinx.serialization.SerialName("coverImgUrl") val coverImgUrl: String = "",
         @kotlinx.serialization.SerialName("trackCount") val trackCount: Int = 0,
-        @kotlinx.serialization.SerialName("trackIds") val trackIds: List<Long> = emptyList(),
+        @kotlinx.serialization.SerialName("trackIds") val trackIds: List<JsonElement> = emptyList(),
         @kotlinx.serialization.SerialName("playCount") val playCount: Double = 0.0,
         val creator: PlaylistCreator? = null,
         val description: String = ""

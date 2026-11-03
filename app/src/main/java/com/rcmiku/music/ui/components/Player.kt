@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -200,8 +201,10 @@ fun Player(
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .weight(1f, fill = false)
+                    .align(Alignment.CenterHorizontally)
                     .padding(horizontal = 24.dp)
+                    .widthIn(max = 400.dp)
                     .aspectRatio(1f)
                     .clip(MaterialTheme.shapes.small)
                     .clickable { onClick() }
@@ -212,13 +215,12 @@ fun Player(
                     contentScale = ContentScale.Crop,
                     modifier = imageModifier
                         .clip(MaterialTheme.shapes.small)
-                        .fillMaxWidth()
+                        .fillMaxSize()
                 )
             }
 
             Column(
                 modifier = Modifier
-                    .weight(6f)
                     .fillMaxWidth(),
                 verticalArrangement = if (screenHeight.dp < 700.dp) Arrangement.spacedBy(0.dp) else Arrangement.spacedBy(
                     24.dp

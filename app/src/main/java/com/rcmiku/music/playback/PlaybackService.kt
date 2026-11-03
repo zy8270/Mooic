@@ -55,6 +55,7 @@ import com.rcmiku.music.utils.dataStore
 import com.rcmiku.music.utils.enumPreference
 import com.rcmiku.music.utils.preference
 import com.rcmiku.music.utils.reportLikeFailure
+import com.rcmiku.ncmapi.utils.DebugLog
 import com.rcmiku.ncmapi.api.account.AccountApi
 import com.rcmiku.ncmapi.api.fm.PersonalFmApi
 import com.rcmiku.ncmapi.api.player.SongLevel
@@ -301,7 +302,21 @@ class PlaybackService : MediaSessionService() {
 
     private fun observeScrobble(player: Player) {
         player.addListener(object : Player.Listener {
+            override fun onPlayerError(error: PlaybackException) {
+                DebugLog.append(
+                    "player error mediaId=${player.currentMediaItem?.mediaId} " +
+                        "uri=${player.currentMediaItem?.localConfiguration?.uri} " +
+                        "code=${error.errorCode} name=${error.errorCodeName} " +
+                        "message=${error.message?.take(240)} cause=${error.cause?.javaClass?.simpleName}:" +
+                        "${error.cause?.message?.take(180)}"
+                )
+            }
+
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                DebugLog.append(
+                    "media transition mediaId=${mediaItem?.mediaId} reason=$reason " +
+                        "state=${player.playbackState} isPlaying=${player.isPlaying}"
+                )
                 resetScrobble(player)
                 maybeInjectHeartBeatSong(player)
                 if (player.isPlaying) startScrobbleTicker(player)
@@ -316,6 +331,10 @@ class PlaybackService : MediaSessionService() {
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
+                DebugLog.append(
+                    "playback state mediaId=${player.currentMediaItem?.mediaId} " +
+                        "state=$playbackState isPlaying=${player.isPlaying}"
+                )
                 if (playbackState == Player.STATE_ENDED) {
                     stopScrobbleTicker()
                 }

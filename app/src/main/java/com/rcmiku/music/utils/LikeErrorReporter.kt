@@ -4,7 +4,6 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
-import com.rcmiku.ncmapi.api.API_BASE_URL
 import com.rcmiku.ncmapi.utils.CookieKeys
 import com.rcmiku.ncmapi.utils.CookieProvider
 
@@ -22,7 +21,7 @@ fun reportLikeFailure(
         appendLine("操作：$action")
         appendLine("歌曲 ID：$songId")
         appendLine("用户 ID：$userId")
-        appendLine("API 地址：$API_BASE_URL")
+        appendLine("API 地址：https://interface.music.163.com")
         appendLine("MUSIC_U：${cookie.containsKey(CookieKeys.MUSIC_U)}")
         appendLine("__csrf：${cookie.containsKey(CookieKeys.CSRF)}")
         appendLine("deviceId：${cookie.containsKey(CookieKeys.DEVICE_ID)}")
