@@ -74,9 +74,8 @@ fun CommentBottomSheet(
         ModalBottomSheet(
             onDismissRequest = onDismiss,
             sheetState = bottomSheetState,
-            modifier = Modifier.fillMaxHeight(0.9f)
         ) {
-            Column(Modifier.fillMaxHeight()) {
+            Column(Modifier.fillMaxHeight(0.9f)) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()

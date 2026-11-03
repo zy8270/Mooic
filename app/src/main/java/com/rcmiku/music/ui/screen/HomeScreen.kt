@@ -6,19 +6,12 @@ import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.snapping.SnapPosition
-import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
@@ -51,7 +44,6 @@ import com.rcmiku.music.LocalPlayerState
 import com.rcmiku.music.R
 import com.rcmiku.music.constants.AlbumThumbnailSize
 import com.rcmiku.music.constants.DURATION_EXIT_SHORT
-import com.rcmiku.music.constants.ListItemHeight
 import com.rcmiku.music.constants.ncmCookieKey
 import com.rcmiku.music.data.favoriteSongIdsDatastore
 import com.rcmiku.music.extensions.playMediaAtId
@@ -80,7 +72,6 @@ fun HomeScreen(
 ) {
     val recommendSongsState by homeScreenViewModel.recommendSongs.collectAsState()
     val recommendPlaylistState by homeScreenViewModel.recommendPlaylist.collectAsState()
-    val gridState = rememberLazyGridState()
     val mediaController = LocalPlayerController.current.controller
     val playerState = LocalPlayerState.current
     val ncmCookie by rememberPreference(ncmCookieKey, "")
@@ -128,61 +119,13 @@ fun HomeScreen(
             ) {
                 LazyColumn {
                     item {
-                        recommendSongsState?.onSuccess {
-                            NavigationTitle(
-                                title = stringResource(R.string.recommend_songs),
-                                modifier = Modifier.animateItem()
-                            )
-                            LazyHorizontalGrid(
-                                rows = GridCells.Fixed(4),
-                                state = gridState,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(ListItemHeight * 4)
-                                    .animateItem(),
-                                flingBehavior = rememberSnapFlingBehavior(
-                                    gridState,
-                                    snapPosition = SnapPosition.Start
-                                )
-                            ) {
-                                itemsIndexed(it.data.dailySongs) { _, song ->
-                                    SongListItem(
-                                        isPlaying = isPlaying,
-                                        isActive = currentMediaId == song.id,
-                                        showLikedIcon = song.id in songIds,
-                                        song = song,
-                                        modifier = Modifier
-                                            .clip(MaterialTheme.shapes.small)
-                                            .width(340.dp)
-                                            .clickable {
-                                                mediaController?.setPlaylist(it.data.dailySongs)
-                                                mediaController?.playMediaAtId(song.id)
-                                            },
-                                        trailingContent = {
-                                            IconButton(onClick = {
-                                                selectSong = song
-                                                openBottomSheet = true
-                                            }) {
-                                                Icon(
-                                                    imageVector = Icons.Default.MoreVert,
-                                                    contentDescription = stringResource(R.string.more)
-                                                )
-                                            }
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    item {
-                        recommendPlaylistState?.onSuccess {
+                        recommendPlaylistState?.onSuccess { response ->
                             NavigationTitle(
                                 title = stringResource(R.string.recommend_playlist),
                                 modifier = Modifier.animateItem()
                             )
                             LazyRow {
-                                items(it.result) { playlist ->
+                                items(response.result) { playlist ->
 
                                     PlaylistGridItem(
                                         playlist = playlist,
@@ -229,6 +172,45 @@ fun HomeScreen(
                                 }
 
                             }
+                        }
+                    }
+
+                    recommendSongsState?.onSuccess { response ->
+                        item {
+                            NavigationTitle(
+                                title = stringResource(R.string.recommend_songs),
+                                modifier = Modifier.animateItem()
+                            )
+                        }
+                        items(
+                            items = response.data.dailySongs,
+                            key = { song -> song.id }
+                        ) { song ->
+                            SongListItem(
+                                isPlaying = isPlaying,
+                                isActive = currentMediaId == song.id,
+                                showLikedIcon = song.id in songIds,
+                                song = song,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(MaterialTheme.shapes.small)
+                                    .clickable {
+                                        mediaController?.setPlaylist(response.data.dailySongs)
+                                        mediaController?.playMediaAtId(song.id)
+                                    }
+                                    .animateItem(),
+                                trailingContent = {
+                                    IconButton(onClick = {
+                                        selectSong = song
+                                        openBottomSheet = true
+                                    }) {
+                                        Icon(
+                                            imageVector = Icons.Default.MoreVert,
+                                            contentDescription = stringResource(R.string.more)
+                                        )
+                                    }
+                                }
+                            )
                         }
                     }
                 }

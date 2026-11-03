@@ -33,10 +33,6 @@ val apiClient = HttpClient(OkHttp) {
         header("Accept", "application/json")
         header("Cache-Control", "no-cache, no-store, max-age=0")
         header("Pragma", "no-cache")
-        val cookie = CookieProvider.cookie
-        if (cookie.isNotEmpty()) {
-            header("Cookie", cookie)
-        }
     }
 }
 
@@ -44,6 +40,7 @@ suspend inline fun <reified T> apiGet(path: String, params: Map<String, Any> = e
     return runCatching {
         val response = apiClient.request("$API_BASE_URL$path") {
             method = HttpMethod.Get
+            CookieProvider.cookie.takeIf { it.isNotEmpty() }?.let { header("Cookie", it) }
             val finalParams = params.toMutableMap().apply {
                 put("timestamp", System.currentTimeMillis())
                 putIfAbsent("randomCNIP", true)
@@ -62,6 +59,7 @@ suspend inline fun <reified T> apiPost(path: String, body: Map<String, Any> = em
     return runCatching {
         val response = apiClient.request("$API_BASE_URL$path") {
             method = HttpMethod.Post
+            CookieProvider.cookie.takeIf { it.isNotEmpty() }?.let { header("Cookie", it) }
             contentType(ContentType.Application.FormUrlEncoded)
             parameter("timestamp", System.currentTimeMillis())
             parameter("_", System.nanoTime())

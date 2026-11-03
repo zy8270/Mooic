@@ -15,6 +15,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.Player.REPEAT_MODE_ALL
 import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.util.Util
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
@@ -29,7 +30,6 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.text.TextOutput
 import androidx.media3.exoplayer.video.VideoRendererEventListener
 import androidx.media3.session.CommandButton
-import androidx.media3.session.CommandButton.ICON_UNDEFINED
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -92,32 +92,55 @@ class PlaybackService : MediaSessionService() {
     private var scrobbleState: ScrobbleState? = null
 
     private val favoriteButton: CommandButton
-        get() = CommandButton.Builder(ICON_UNDEFINED)
+        get() = CommandButton.Builder(CommandButton.ICON_HEART_UNFILLED)
             .setCustomIconResId(if (use40DpIcon) R.drawable.ic_favorite_40_dp else R.drawable.ic_favorite)
             .setDisplayName("like")
             .setSessionCommand(MediaSessionConstants.CommandToggleLike)
             .build()
 
     private val favoriteButtonOn: CommandButton
-        get() = CommandButton.Builder(ICON_UNDEFINED)
+        get() = CommandButton.Builder(CommandButton.ICON_HEART_FILLED)
             .setCustomIconResId(if (use40DpIcon) R.drawable.ic_favorite_fill_40_dp else R.drawable.ic_favorite_fill)
             .setDisplayName("like_on")
             .setSessionCommand(MediaSessionConstants.CommandToggleLike)
             .build()
 
     private val shuffleButton: CommandButton
-        get() = CommandButton.Builder(ICON_UNDEFINED)
+        get() = CommandButton.Builder(CommandButton.ICON_SHUFFLE_OFF)
             .setCustomIconResId(if (use40DpIcon) R.drawable.ic_shuffle_40_dp else R.drawable.ic_shuffle)
             .setDisplayName("shuffle")
             .setSessionCommand(MediaSessionConstants.CommandToggleShuffle)
             .build()
 
     private val shuffleButtonOn: CommandButton
-        get() = CommandButton.Builder(ICON_UNDEFINED)
+        get() = CommandButton.Builder(CommandButton.ICON_SHUFFLE_ON)
             .setCustomIconResId(if (use40DpIcon) R.drawable.ic_shuffle_on_40_dp else R.drawable.ic_shuffle_on)
             .setDisplayName("shuffle_on")
             .setSessionCommand(MediaSessionConstants.CommandToggleShuffle)
             .build()
+
+    private val previousButton = CommandButton.Builder(CommandButton.ICON_PREVIOUS)
+        .setDisplayName("previous")
+        .setPlayerCommand(Player.COMMAND_SEEK_TO_PREVIOUS)
+        .setSlots(CommandButton.SLOT_BACK)
+        .build()
+
+    private val nextButton = CommandButton.Builder(CommandButton.ICON_NEXT)
+        .setDisplayName("next")
+        .setPlayerCommand(Player.COMMAND_SEEK_TO_NEXT)
+        .setSlots(CommandButton.SLOT_FORWARD)
+        .build()
+
+    private fun playPauseButton(player: Player): CommandButton {
+        val showPlay = Util.shouldShowPlayButton(player)
+        return CommandButton.Builder(
+            if (showPlay) CommandButton.ICON_PLAY else CommandButton.ICON_PAUSE
+        )
+            .setDisplayName(if (showPlay) "play" else "pause")
+            .setPlayerCommand(Player.COMMAND_PLAY_PAUSE)
+            .setSlots(CommandButton.SLOT_CENTRAL)
+            .build()
+    }
 
     private val scope = CoroutineScope(Dispatchers.Main) + SupervisorJob()
 
@@ -156,6 +179,7 @@ class PlaybackService : MediaSessionService() {
             .apply {
                 val resolvingDataSourceFactory: ResolvingDataSource.Factory = ResolvingDataSource.Factory(
                     DefaultHttpDataSource.Factory()
+                        .setAllowCrossProtocolRedirects(true)
                 ) { dataSpec ->
                     runBlocking {
                         dataSpec.withUri(
@@ -207,7 +231,7 @@ class PlaybackService : MediaSessionService() {
                     PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
                 )
             ).setCallback(MediaSessionCallback())
-            .setCustomLayout(ImmutableList.of(favoriteButton, shuffleButton)).build()
+            .setMediaButtonPreferences(mediaButtonPreferences(player)).build()
         observeIconPreference()
         observeAudioFocusPreference(player)
         observeHeartBeat(player)
@@ -234,13 +258,19 @@ class PlaybackService : MediaSessionService() {
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? =
         mediaSession
 
-    fun updateCustomLayout() {
-        mediaSession?.setCustomLayout(
-            ImmutableList.of(
-                if (favoriteSongIds.contains(mediaSession?.player?.currentMediaItem?.mediaId?.toLong())) favoriteButtonOn else favoriteButton,
-                if (mediaSession?.player?.shuffleModeEnabled != false) shuffleButtonOn else shuffleButton
-            )
+    private fun mediaButtonPreferences(player: Player): ImmutableList<CommandButton> =
+        ImmutableList.of(
+            previousButton,
+            playPauseButton(player),
+            nextButton,
+            if (player.currentMediaItem?.mediaId?.toLongOrNull() in favoriteSongIds) favoriteButtonOn else favoriteButton,
+            if (player.shuffleModeEnabled) shuffleButtonOn else shuffleButton
         )
+
+    fun updateCustomLayout() {
+        mediaSession?.let { session ->
+            session.setMediaButtonPreferences(mediaButtonPreferences(session.player))
+        }
     }
 
     override fun onUpdateNotification(session: MediaSession, startInForegroundRequired: Boolean) {
